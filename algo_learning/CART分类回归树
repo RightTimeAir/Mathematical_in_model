@@ -1,0 +1,216 @@
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+
+# 最小二乘损失
+def err(dataSet):
+    #return sum((dataSet[:,-1]- dataSet[:,-1].mean())**2) # 最原始的写法
+    return np.var(dataSet[:,-1])*dataSet.shape[0]  #均方差*数据总条数
+
+#划分数据集，按出入的数据列fea，数据值value将数据划分为两部分
+def splitDataSet(dataSet, fea, value):
+    dataSet1=dataSet[dataSet[:,fea]<=value]
+    dataSet2=dataSet[dataSet[:,fea]>value]
+    return dataSet1,dataSet2
+    
+# 选择最好的特征划分数据集，min_sample每次划分后每部分最少的数据条数，epsilon误差下降阈值，值越小划分的决策树越深
+def chooseBestFeature(dataSet,min_sample=4,epsilon=0.5):
+    features=dataSet.shape[1]-1   # x特征列数量
+    sErr=err(dataSet) # 整个数据集的损失
+    minErr=np.inf
+    bestColumn = 0 # 划分最优列
+    bestValue = 0  # 划分最优的值
+    nowErr=0       # 当前平方误差
+    if len(np.unique(dataSet[:,-1].T.tolist())) == 1: # 数据全是一类的情况下 返回
+        return None, np.mean(dataSet[:,-1])
+    for fea in range(0,features): # 按x特征列循环
+        for row in range(0,dataSet.shape[0]): # 遍历每行数据，寻找最优划分
+            dataSet1,dataSet2=splitDataSet(dataSet, fea,dataSet[row,fea]) # 获得切分后的数据
+            if len(dataSet1) < min_sample or len(dataSet2) < min_sample:  # 按行遍历时总会有一些划分得到的集合不满足最小数据条数约束，跳过此类划分
+                continue
+            nowErr=err(dataSet1)+err(dataSet2) # 计算当前划分的平方误差
+            #print('fea:',fea,'row:',row,'datavalue',dataSet[row,fea],'nowErr',nowErr)
+            if nowErr<minErr: # 判断获得最优切分值
+                minErr=nowErr
+                bestColumn=fea
+                bestValue=dataSet[row,fea]
+        #print('fea',fea,'minErr',minErr,'bestColumn',bestColumn,'bestValue',bestValue)
+    if (sErr - minErr) < epsilon: # 当前误差下降较小时，返回
+        return None, np.mean(dataSet[:,-1])
+    # 当前最优划分集合
+    dataSet1,dataSet2=splitDataSet(dataSet, bestColumn,bestValue)
+    if len(dataSet1) < min_sample or len(dataSet2) < min_sample: # 如果划分的数据集很小，返回
+        return None, np.mean(dataSet[:,-1])
+    return bestColumn,bestValue
+    
+def createTree(dataSet):
+    """
+    输入：训练数据集D，特征集A，阈值ε
+    输出：决策树T
+    """
+    bestColumn,bestValue=chooseBestFeature(dataSet)
+    if bestColumn == None:  # 所有列均遍历完毕，返回
+        return bestValue
+    retTree = {}  # 决策树 
+    retTree['spCol'] = bestColumn # 最优分割列
+    retTree['spVal'] = bestValue  # 最优分割值
+    lSet, rSet = splitDataSet(dataSet, bestColumn,bestValue) # 按当前最优分割列级值划分为左右2枝
+    retTree['left'] = createTree(lSet)  # 迭代继续划分左枝
+    retTree['right'] = createTree(rSet) # 迭代继续划分右枝
+    return retTree
+
+if __name__ == '__main__':
+    # 使用sin函数随机产生x，y数据
+    X_data_raw = np.linspace(-3, 3, 50)
+    np.random.shuffle(X_data_raw)  # 随机打乱数据
+    y_data = np.sin(X_data_raw)    # 产生数据y
+    x = np.transpose([X_data_raw]) # 将x进行转换
+    y = y_data + 0.1 * np.random.randn(y_data.shape[0]) # 产生数据y，增加随机噪声
+    dataSet=np.column_stack((x,y.reshape((-1,1))))      # 将x与y进行合并
+    
+#    data=pd.read_table('D:/python_data/ex0.txt',header=None)
+#    dataSet=data.values
+    
+    mytree=createTree(dataSet) 
+    print('mytree\n',mytree)
+
+
+
+
+
+
+上面是PYTHON的
+    下面是MATLAB的
+       没试过
+ 
+ 
+
+
+
+    >> function D = CART(train_features, train_targets, params, region) 
+ 
+% Classify using classification and regression trees 
+% Inputs: 
+%         features        - Train features 
+%        targets            - Train targets 
+%        params                - [Impurity type, Percentage of incorrectly assigned samples at a node] 
+%                   Impurity can be: Entropy, Variance (or Gini), or Missclassification 
+%        region            - Decision region vector: [-x x -y y number_of_points] 
+% 
+% Outputs 
+%        D                        - Decision sufrace 
+ 
+ 
+[Ni, M]                   = size(train_features); 
+ 
+%Get parameters 
+[split_type, inc_node] = process_params(params); 
+ 
+%For the decision region 
+N           = region(5); 
+mx          = ones(N,1) * linspace (region(1),region(2),N); %linspace（x1,x2,n)  用于生成x1,x2之间个数为n的向量
+my          = linspace (region(3),region(4),N)' * ones(1,N); %ones（m,m) 用于生成全部为1的m*n矩阵
+flatxy      = [mx(:), my(:)]'; 
+ 
+%Preprocessing 
+[f, t, UW, m]   = PCA(train_features, train_targets, Ni, region); 
+train_features  = UW * (train_features - m*ones(1,M));
+flatxy          = UW * (flatxy - m*ones(1,N^2));
+ 
+%Build the tree recursively 
+disp('Building tree') 
+tree        = make_tree(train_features, train_targets, M, split_type, inc_node, region); 
+ 
+%Make the decision region according to the tree 
+disp('Building decision surface using the tree') 
+targets                = use_tree(flatxy, 1:N^2, tree); 
+ 
+D                                = reshape(targets,N,N); 
+%END 
+ 
+function targets = use_tree(features, indices, tree) 
+%Classify recursively using a tree 
+ 
+if isnumeric(tree.Raction) 
+   %Reached an end node 
+   targets = zeros(1,size(features,2)); 
+   targets(indices) = tree.Raction(1); 
+else 
+   %Reached a branching, so: 
+   %Find who goes where 
+   in_right    = indices(find(eval(tree.Raction))); 
+   in_left     = indices(find(eval(tree.Laction))); 
+    
+   Ltargets         = use_tree(features, in_left, tree.left); 
+   Rtargets         = use_tree(features, in_right, tree.right); 
+    
+   targets                 = Ltargets + Rtargets; 
+end 
+%END use_tree  
+ 
+function tree = make_tree(features, targets, Dlength, split_type, inc_node, region) 
+%Build a tree recursively 
+ 
+if (length(unique(targets)) == 1), 
+   %There is only one type of targets, and this generates a warning, so deal with it separately 
+   tree.right      = []; 
+   tree.left       = []; 
+   tree.Raction    = targets(1); 
+   tree.Laction    = targets(1); 
+else
+end 
+ 
+[Ni, M] = size(features); 
+Nt      = unique(targets); 
+N       = hist(targets, Nt); 
+ 
+if ((sum(N < Dlength*inc_node) == length(Nt) - 1) || (M == 1)),  
+   %No further splitting is neccessary 
+   tree.right      = []; 
+   tree.left       = []; 
+   if (length(Nt) ~= 1), 
+      MLlabel                          = find(N == max(N)); 
+   else 
+      MLlabel                   = 1; 
+   end 
+   tree.Raction    = Nt(MLlabel); 
+   tree.Laction    = Nt(MLlabel); 
+    
+else 
+   %Split the node according to the splitting criterion   
+   deltaI                = zeros(1,Ni); 
+   split_point = zeros(1,Ni); 
+   op                                = optimset('Display', 'off');    
+   for i = 1:Ni, 
+      split_point(i) = fminbnd('CARTfunctions', region(i*2-1), region(i*2), op, features, targets, i, split_type); 
+      I(i)                                = feval('CARTfunctions', split_point(i), features, targets, i, split_type); 
+   end 
+    
+   [m, dim]                                = min(I); 
+   loc                                        = split_point(dim); 
+     
+   %So, the split is to be on dimention 'dim' at location 'loc' 
+   indices                 = 1:M; 
+   tree.Raction= ['features(' num2str(dim) ',indices) >  ' num2str(loc)]; 
+   tree.Laction= ['features(' num2str(dim) ',indices) <= ' num2str(loc)]; 
+   in_right    = find(eval(tree.Raction)); 
+   in_left     = find(eval(tree.Laction)); 
+    
+   if isempty(in_right) || isempty(in_left) 
+      %No possible split found 
+           tree.right      = []; 
+           tree.left       = []; 
+           if (length(Nt) ~= 1), 
+              MLlabel           = find(N == max(N)); 
+           else 
+              MLlabel                  = 1; 
+           end 
+           tree.Raction    = Nt(MLlabel); 
+           tree.Laction    = Nt(MLlabel); 
+   else 
+           %...It's possible to build new nodes 
+           tree.right = make_tree(features(:,in_right), targets(in_right), Dlength, split_type, inc_node, region); 
+           tree.left  = make_tree(features(:,in_left), targets(in_left), Dlength, split_type, inc_node, region);       
+   end 
+    
+end 
